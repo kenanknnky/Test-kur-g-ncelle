@@ -459,7 +459,7 @@ function renderPanel(){
     '</div>'+rres+'</div>';
 
   const lv=latestWithValues();
-  let breakdown='';
+  let breakdown='', allocMini='';
   if(lv){
     const colors=['#5AA9E6','#2FBF71','#E0A526','#C77DD6','#E07A5A','#5BD6C0','#9BB0C9','#D6B85A'];
     const tt=total(lv);
@@ -474,13 +474,12 @@ function renderPanel(){
     const aTypes=settings.allocTypes||[];
     const aItems=aTypes.map((tp,i)=>({k:tp.key,l:tp.label,v:typeValue(lv,tp.key),c:ALLOC_COLORS[i%ALLOC_COLORS.length]}));
     const aTot=aItems.reduce((a,x)=>a+x.v,0);
-    let allocMini='';
     if(aTot>0){ allocMini='<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--border)">'+
       '<div>'+pieSvg(aItems,120)+'</div><div style="flex:1;min-width:150px">'+
       aItems.map(x=>'<div style="display:flex;align-items:center;gap:7px;margin-bottom:6px"><span style="width:9px;height:9px;border-radius:3px;background:'+x.c+';flex:0 0 auto"></span>'+
         '<span style="font-size:12.5px">'+x.l+'</span><span class="num" style="margin-left:auto;font-size:12px;color:var(--muted)">%'+(aTot?Math.round(x.v/aTot*100):0)+'</span></div>').join('')+
       '</div></div>'; }
-    breakdown='<div class="card"><div class="eyebrow" style="margin-bottom:14px">Kategori dağılımı · '+fmtDate(lv.date)+'</div>'+rows+allocMini+'</div>';
+    breakdown='<div class="card"><div class="eyebrow" style="margin-bottom:14px">Kategori dağılımı · '+fmtDate(lv.date)+'</div>'+rows+'</div>';
   }else{
     breakdown='<div class="card empty">Kategori dağılımı için kategori kırılımlı bir kayıt ekleyin.</div>';
   }
@@ -510,6 +509,7 @@ function renderPanel(){
       '<div class="asof">'+fmtDate(cur.date)+' itibarıyla toplam servet</div>'+
       '<div class="big num">'+fmtTL(t)+'</div>'+
       (wk&&!wk.na?'<span class="chip '+(wk.pct>=0?'pos':'neg')+'">'+(wk.pct>=0?'▲':'▼')+' '+fmtPct(wk.pct)+' · '+(wk.abs>=0?'+':'−')+fmtTL(Math.abs(wk.abs))+'<span class="since">son haftaya göre</span></span>':'')+
+      allocMini+
       '<div style="text-align:right;font-size:11px;color:var(--faint);margin-top:10px">Projeksiyon için kaydırın →</div>'+
     '</div>'+
     '<div class="heroslide card" style="margin-bottom:0">'+projInner+'</div>'+
@@ -699,18 +699,32 @@ function allocCmp(s,p){ if(s.length<2) return null; const cur=s[s.length-1];
   let best=null,bd=Infinity;
   for(let i=0;i<s.length-1;i++){ const d=Math.abs(dObj(s[i].date).getTime()-target); if(d<bd){bd=d;best=s[i];} }
   return best; }
+let __pieN=0;
+function shadeHex(c,f){ try{ const n=parseInt(c.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=Math.min(255,Math.round(r+(255-r)*f)); g=Math.min(255,Math.round(g+(255-g)*f)); b=Math.min(255,Math.round(b+(255-b)*f));
+  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }catch(e){ return c; } }
 function pieSvg(items,w){ w=w||230;
-  const tot=items.reduce((s,x)=>s+x.v,0)||1; const cx=110,cy=110,R=95; let a=-Math.PI/2; let paths='';
-  if(items.filter(x=>x.v>0).length===1){ const it=items.find(x=>x.v>0);
-    return '<svg viewBox="0 0 220 220" style="width:min('+w+'px,60vw);height:auto"><circle cx="110" cy="110" r="95" fill="'+it.c+'"/></svg>'; }
-  items.forEach(x=>{ if(x.v<=0) return; const frac=x.v/tot; const a2=a+frac*2*Math.PI;
-    const x1=cx+R*Math.cos(a),y1=cy+R*Math.sin(a),x2=cx+R*Math.cos(a2),y2=cy+R*Math.sin(a2);
+  const uid='pg'+(__pieN++);
+  const tot=items.reduce((s,x)=>s+x.v,0)||1; const cx=110,cy=110,R=90,ex=4;
+  const act=items.filter(x=>x.v>0);
+  let defs='<defs><filter id="'+uid+'sh" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="2.5" stdDeviation="3.5" flood-color="#000" flood-opacity="0.45"/></filter>';
+  items.forEach((x,i)=>{ defs+='<radialGradient id="'+uid+'g'+i+'" cx="36%" cy="32%" r="85%"><stop offset="0%" stop-color="'+shadeHex(x.c,0.3)+'"/><stop offset="72%" stop-color="'+x.c+'"/><stop offset="100%" stop-color="'+shadeHex(x.c,-0)+'"/></radialGradient>'; });
+  defs+='</defs>';
+  if(act.length===1){ const i=items.indexOf(act[0]);
+    return '<svg viewBox="0 0 220 220" style="width:min('+w+'px,60vw);height:auto">'+defs+
+      '<circle cx="110" cy="110" r="'+R+'" fill="url(#'+uid+'g'+i+')" stroke="#10141A" stroke-width="1.5" filter="url(#'+uid+'sh)"/>'+
+      '<text x="110" y="116" text-anchor="middle" font-size="16" font-weight="700" fill="#FFFFFF" stroke="rgba(0,0,0,0.45)" stroke-width="3" paint-order="stroke" font-family="Space Grotesk,system-ui">%100</text></svg>'; }
+  let a=-Math.PI/2, paths='', labels='';
+  items.forEach((x,i)=>{ if(x.v<=0) return; const frac=x.v/tot; const a2=a+frac*2*Math.PI;
+    const mid=(a+a2)/2, ox=ex*Math.cos(mid), oy=ex*Math.sin(mid);
+    const x1=cx+ox+R*Math.cos(a),y1=cy+oy+R*Math.sin(a),x2=cx+ox+R*Math.cos(a2),y2=cy+oy+R*Math.sin(a2);
     const large=frac>0.5?1:0;
-    paths+='<path d="M'+cx+' '+cy+' L'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+R+' '+R+' 0 '+large+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)+' Z" fill="'+x.c+'" stroke="var(--surface)" stroke-width="2"/>';
-    const mid=(a+a2)/2, lr=R*0.62, lx=cx+lr*Math.cos(mid), ly=cy+lr*Math.sin(mid);
-    if(frac>0.07) paths+='<text x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" text-anchor="middle" fill="#0E1116" font-size="15" font-weight="700" font-family="Space Grotesk">%'+Math.round(frac*100)+'</text>';
+    paths+='<path d="M'+(cx+ox).toFixed(1)+' '+(cy+oy).toFixed(1)+' L'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+R+' '+R+' 0 '+large+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)+' Z" fill="url(#'+uid+'g'+i+')" stroke="#10141A" stroke-width="1.5" stroke-linejoin="round"/>';
+    if(frac>0.055){ const lr=R*0.6, lx=cx+ox+lr*Math.cos(mid), ly=cy+oy+lr*Math.sin(mid);
+      labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly+5.5).toFixed(1)+'" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF" stroke="rgba(0,0,0,0.45)" stroke-width="3" paint-order="stroke" font-family="Space Grotesk,system-ui">%'+Math.round(frac*100)+'</text>'; }
     a=a2; });
-  return '<svg viewBox="0 0 220 220" style="width:min('+w+'px,60vw);height:auto">'+paths+'</svg>'; }
+  return '<svg viewBox="0 0 220 220" style="width:min('+w+'px,60vw);height:auto">'+defs+'<g filter="url(#'+uid+'sh)">'+paths+'</g>'+labels+'</svg>';
+}
 function ensureCatAlloc(){ if(!settings.catAlloc) settings.catAlloc={};
   settings.categories.forEach(c=>{ if(!settings.catAlloc[c.key]) settings.catAlloc[c.key]={tl:100}; }); }
 function typeValue(e,tk){ return settings.categories.reduce((s,c)=> s+(Number(e.values[c.key])||0)*(((settings.catAlloc||{})[c.key]||{})[tk]||0)/100,0); }
