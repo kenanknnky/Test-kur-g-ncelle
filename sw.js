@@ -1,5 +1,5 @@
 /* Portföy çevrimdışı önbellek */
-const C='portfoy-cache-v25';
+const C='portfoy-cache-v26';
 const ASSETS=['./','./index.html','./manifest.json','./sw.js'];
 self.addEventListener('install',e=>{ self.skipWaiting(); e.waitUntil(caches.open(C).then(c=>c.addAll(ASSETS).catch(()=>{}))); });
 self.addEventListener('activate',e=>{ e.waitUntil(Promise.all([
