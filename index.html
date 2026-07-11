@@ -368,7 +368,8 @@ function renderPanel(){
       '<div class="sub">'+cp.label+': '+chip+amt+(l.sub?' · '+l.sub:'')+'</div></div>';
   }).join('');
 
-  const sinceVal=settings.startValue?((t/settings.startValue-1)*100):null;
+  const firstE=s[0];
+  const sinceVal=(s.length>1&&total(firstE)>0)?((t/total(firstE)-1)*100):null;
   const sinceCls=sinceVal==null?'':(sinceVal>=0?'pos':'neg');
 
   // ----- Hedefler kartı (çoklu) -----
@@ -526,12 +527,13 @@ function renderPanel(){
   '<div class="grid lenses" style="margin-bottom:12px">'+lensCards+'</div>'+
   hedefHtml+
   breakdown+
-  '<div class="grid statrow" style="margin:12px 0">'+
+  '<div style="height:12px"></div>'+
+  rangeHtml+
+  '<div class="grid statrow">'+
     '<div class="card stat"><div class="v '+sinceCls+'">'+(sinceVal==null?'–':fmtPct(sinceVal))+'</div>'+
-      '<div class="l">'+(settings.startDate?fmtDate(settings.startDate):'Başlangıç')+' tarihinden beri toplam artış</div></div>'+
+      '<div class="l">'+fmtDate(firstE.date)+' (ilk kayıt) tarihinden beri toplam artış</div></div>'+
     '<div class="card stat"><div class="v num">'+s.length+'</div><div class="l">Toplam kayıt sayısı</div></div>'+
-  '</div>'+
-  rangeHtml;
+  '</div>';
 }
 
 /* ---------- GRAFİK ---------- */
@@ -892,13 +894,6 @@ function renderSettings(){
       '<input value="'+String(tp.label).replace(/"/g,'&quot;')+'" oninput="editAllocType('+i+',this.value)">'+
       '<button class="iconbtn danger" onclick="removeAllocType('+i+')">Kaldır</button></div>').join('')+
     '<button class="iconbtn" style="margin-top:6px" onclick="addAllocType()">+ Tür ekle</button>'+
-  '</div>'+
-  '<div class="card setsec">'+
-    '<h3>Başlangıç</h3><p class="d">"Toplam artış" bu başlangıç değerine göre hesaplanır.</p>'+
-    '<div class="row2">'+
-      '<div class="field"><label>Başlangıç tarihi</label><input type="date" value="'+(settings.startDate||'')+'" onchange="setS(\'startDate\',this.value)"></div>'+
-      '<div class="field"><label>Başlangıç değeri (₺)</label><input class="num" value="'+(settings.startValue||'')+'" oninput="setS(\'startValue\',this.value)"></div>'+
-    '</div>'+
   '</div>'+
   '<div class="card setsec">'+
     '<h3>Hedefler</h3><p class="d">Bir hedefe ₺ ve $ tutarlarını birlikte girebilirsiniz; ikisi ayrı ayrı takip edilir. Tarih girerseniz gereken aylık birikim ve durum hesaplanır.</p>'+
