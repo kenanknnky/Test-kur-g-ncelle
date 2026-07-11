@@ -86,6 +86,13 @@ nav.tabs button:hover:not(.on){color:var(--text)}
 .tgtcarousel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .tgtslide{flex:0 0 86%;max-width:330px;scroll-snap-align:start;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px}
 .tgthint{font-size:11px;color:var(--faint);margin-top:2px}
+.herocar{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-bottom:12px}
+.heroslide{flex:0 0 100%;scroll-snap-align:start;min-width:0}
+.lock{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
+.lock input{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:24px;letter-spacing:10px;text-align:center;padding:12px;border-radius:12px;width:230px}
+.lock input:focus{outline:none;border-color:var(--gold)}
+.lock .lbtn{background:var(--gold);color:#1a1303;border:none;font-family:var(--sans);font-weight:600;font-size:15px;padding:12px 34px;border-radius:11px;cursor:pointer}
+.lock .lerr{color:var(--neg);font-size:13px;min-height:18px}
 
 .statrow{grid-template-columns:1fr 1fr}
 .stat .v{font-size:clamp(22px,5vw,30px);font-weight:600;letter-spacing:-.02em}
@@ -208,6 +215,7 @@ tr.editrow:hover{background:var(--surface2)}
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="lock hide" id="lock"></div>
 <div class="iosbanner hide" id="iosbanner"><span class="ic"></span><span>Uygulama gibi kullanmak için: <b>Paylaş</b> &rarr; <b>Ana Ekrana Ekle</b></span><span class="x" onclick="this.parentNode.remove()">&times;</span></div>
 
 <script>
@@ -477,11 +485,34 @@ function renderPanel(){
     breakdown='<div class="card empty">Kategori dağılımı için kategori kırılımlı bir kayıt ekleyin.</div>';
   }
 
+  // ----- projeksiyon (son ~6 ayın bileşik aylık artışına göre) -----
+  let projInner='';
+  {
+    const base=entryNearDaysAgo(s,182)||s[0];
+    const dd=base?(dObj(cur.date).getTime()-dObj(base.date).getTime())/86400000:0;
+    if(s.length>=3&&dd>=28&&total(base)>0){
+      const months=dd/30.44;
+      const mRate=Math.pow(t/total(base),1/months)-1;
+      const projRows=[['3 Ay',3],['6 Ay',6],['1 Yıl',12],['2 Yıl',24],['3 Yıl',36],['5 Yıl',60],['10 Yıl',120]].map(p=>{
+        const v=t*Math.pow(1+mRate,p[1]);
+        return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4.5px 0;border-bottom:1px solid var(--border)"><span style="font-size:12.5px;color:var(--muted)">'+p[0]+'</span><span class="num" style="font-size:13.5px">'+fmtTL(v)+'</span></div>';
+      }).join('');
+      projInner='<div class="asof">Projeksiyon · aylık ort. <span class="num" style="color:'+(mRate>=0?'var(--pos)':'var(--neg)')+'">'+fmtPct(mRate*100)+'</span> ('+fmtDate(base.date)+' bazlı)</div>'+
+        projRows+
+        '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Son dönem hızınızın aynen sürdüğü varsayımıyla, TL bazında ve nominaldir (enflasyon düşülmemiştir); garanti değildir.</div>';
+    } else {
+      projInner='<div class="asof">Projeksiyon</div><div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">Projeksiyon için en az ~1 aylık veri aralığı gerekiyor. Kayıt girdikçe burada 3 ay – 10 yıl tahminleri belirecek.</div>';
+    }
+  }
   return ''+
-  '<div class="card hero">'+
-    '<div class="asof">'+fmtDate(cur.date)+' itibarıyla toplam servet</div>'+
-    '<div class="big num">'+fmtTL(t)+'</div>'+
-    (wk&&!wk.na?'<span class="chip '+(wk.pct>=0?'pos':'neg')+'">'+(wk.pct>=0?'▲':'▼')+' '+fmtPct(wk.pct)+' · '+(wk.abs>=0?'+':'−')+fmtTL(Math.abs(wk.abs))+'<span class="since">son haftaya göre</span></span>':'')+
+  '<div class="herocar">'+
+    '<div class="heroslide card hero" style="margin-bottom:0">'+
+      '<div class="asof">'+fmtDate(cur.date)+' itibarıyla toplam servet</div>'+
+      '<div class="big num">'+fmtTL(t)+'</div>'+
+      (wk&&!wk.na?'<span class="chip '+(wk.pct>=0?'pos':'neg')+'">'+(wk.pct>=0?'▲':'▼')+' '+fmtPct(wk.pct)+' · '+(wk.abs>=0?'+':'−')+fmtTL(Math.abs(wk.abs))+'<span class="since">son haftaya göre</span></span>':'')+
+      '<div style="text-align:right;font-size:11px;color:var(--faint);margin-top:10px">Projeksiyon için kaydırın →</div>'+
+    '</div>'+
+    '<div class="heroslide card" style="margin-bottom:0">'+projInner+'</div>'+
   '</div>'+
   '<div class="seg" id="periodseg" style="margin-bottom:12px">'+
     PERIODS.map(p=>'<button data-p="'+p.key+'" class="'+(p.key===period?'on':'')+'">'+p.label+'</button>').join('')+
@@ -855,6 +886,18 @@ function renderSettings(){
     '<button class="iconbtn" style="margin-top:4px" onclick="addTarget()">+ Hedef ekle</button>'+
   '</div>'+
   '<div class="card setsec">'+
+    '<h3>PIN kilidi</h3>'+
+    (settings.pin?
+      ('<p class="d">PIN aktif ('+settings.pin.len+' haneli). Uygulama her açılışta PIN soruyor.</p>'+
+       '<button class="iconbtn danger" onclick="removePin()">PIN\'i kaldır</button>')
+      :
+      ('<p class="d">Uygulama açılırken PIN sorulsun. Not: PIN bir gizlilik perdesidir, verileri şifrelemez.</p>'+
+       '<div class="field"><label>Yeni PIN (4–6 rakam)</label><input id="np_pin" class="num" inputmode="numeric" maxlength="6" placeholder="örn. 2580"></div>'+
+       '<div class="field"><label>Kurtarma sorusu (isteğe bağlı ipucu)</label><input id="np_q" placeholder="örn. İlk evcil hayvanım"></div>'+
+       '<div class="field"><label>Kurtarma cevabı (PIN unutulursa sorulur)</label><input id="np_a" placeholder="cevap"></div>'+
+       '<button class="iconbtn" onclick="createPin()">PIN\'i etkinleştir</button>'))+
+  '</div>'+
+  '<div class="card setsec">'+
     '<h3>Veri</h3><p class="d">Verileriniz bu uygulamada saklanır. Düzenli olarak yedek almanız önerilir.</p>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
       '<button class="iconbtn" onclick="exportData()">↓ Yedek indir (JSON)</button>'+
@@ -1029,6 +1072,52 @@ async function resetAll(){
   entries=[]; allocs=[]; settings=defaultSettings(); await sset(KEY_E,entries); await sset(KEY_S,settings); await sset(KEY_A,allocs); render();
 }
 
+/* ---------- PIN kilidi ---------- */
+async function pinHash(sv){ try{ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('portfoy|'+sv)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+  catch(e){ let h=5381; const q='portfoy|'+sv; for(let i=0;i<q.length;i++){ h=((h<<5)+h+q.charCodeAt(i))>>>0; } return 'x'+h.toString(16); } }
+function showLock(){
+  const el=document.getElementById('lock');
+  el.innerHTML='<div class="logo" style="width:52px;height:52px"></div>'+
+    '<div style="font-size:17px;font-weight:600">Portföy kilitli</div>'+
+    '<input id="pin_in" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••" onkeydown="if(event.key===\'Enter\')tryUnlock()">'+
+    '<div class="lerr" id="pin_err"></div>'+
+    '<button class="lbtn" onclick="tryUnlock()">Aç</button>'+
+    '<button class="btn-ghost" onclick="forgotPin()">PIN\'i unuttum</button>';
+  el.classList.remove('hide');
+  setTimeout(()=>{const i=document.getElementById('pin_in'); if(i) i.focus();},80);
+}
+async function tryUnlock(){
+  const i=document.getElementById('pin_in'), e=document.getElementById('pin_err');
+  const v=(i.value||'').trim();
+  if(await pinHash(v)===settings.pin.hash){ document.getElementById('lock').classList.add('hide'); }
+  else { e.textContent='Yanlış PIN'; i.value=''; i.focus(); }
+}
+async function forgotPin(){
+  const q=settings.pin.recQ?('Kurtarma sorunuz: '+settings.pin.recQ):'Kurtarma cevabınızı girin:';
+  const a=prompt(q); if(a==null) return;
+  if(await pinHash(a.trim().toLowerCase())===settings.pin.recHash){
+    delete settings.pin; await sset(KEY_S,settings);
+    document.getElementById('lock').classList.add('hide');
+    alert('PIN kaldırıldı. İsterseniz Ayarlar bölümünden yeni PIN oluşturabilirsiniz.');
+    if(currentTab==='ayarlar') render();
+  } else alert('Cevap eşleşmedi.');
+}
+async function createPin(){
+  const p=(document.getElementById('np_pin').value||'').trim();
+  const q=(document.getElementById('np_q').value||'').trim();
+  const a=(document.getElementById('np_a').value||'').trim();
+  if(!/^[0-9]{4,6}$/.test(p)){ alert('PIN 4 ile 6 arası rakamdan oluşmalı.'); return; }
+  if(!a){ alert('Kurtarma cevabı boş olamaz — PIN unutulursa tek kurtarma yolu bu.'); return; }
+  settings.pin={hash:await pinHash(p),len:p.length,recQ:q,recHash:await pinHash(a.toLowerCase())};
+  await sset(KEY_S,settings); render();
+  alert('PIN etkin. Uygulama bir sonraki açılışta PIN soracak.');
+}
+async function removePin(){
+  const p=prompt('Mevcut PIN:'); if(p==null) return;
+  if(await pinHash(p.trim())===settings.pin.hash){ delete settings.pin; await sset(KEY_S,settings); render(); }
+  else alert('Yanlış PIN.');
+}
+
 /* ---------- routing ---------- */
 let currentTab='panel';
 function render(){
@@ -1094,5 +1183,6 @@ window.addEventListener('resize',()=>{ if(currentTab==='grafik') drawChart(); })
   });
   await sset(KEY_S,settings);
   render();
+  if(settings.pin&&settings.pin.hash) showLock();
 })();
 </script>
