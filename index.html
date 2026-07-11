@@ -86,6 +86,9 @@ nav.tabs button:hover:not(.on){color:var(--text)}
 .tgtcarousel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .tgtslide{flex:0 0 86%;max-width:330px;scroll-snap-align:start;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px}
 .tgthint{font-size:11px;color:var(--faint);margin-top:2px}
+.projseg{display:flex;gap:4px;flex-wrap:wrap;margin:9px 0 4px}
+.projseg button{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 9px;border-radius:7px;font-family:var(--sans);cursor:pointer}
+.projseg button.on{background:var(--gold);color:#1a1303;border-color:var(--gold);font-weight:600}
 .herocar{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-bottom:12px}
 .heroslide{flex:0 0 100%;scroll-snap-align:start;min-width:0}
 .lock{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
@@ -234,7 +237,7 @@ async function sset(k,v){
 }
 
 /* ---------- state ---------- */
-let entries=[], settings=null, allocs=[], period='h', chartLens='compare', chartRange='all', rangeStart=null, rangeEnd=null;
+let entries=[], settings=null, allocs=[], period='h', chartLens='compare', chartRange='all', rangeStart=null, rangeEnd=null, projBase='6a';
 
 /* ---------- seed ---------- */
 function seed(){
@@ -484,10 +487,13 @@ function renderPanel(){
     breakdown='<div class="card empty">Kategori dağılımı için kategori kırılımlı bir kayıt ekleyin.</div>';
   }
 
-  // ----- projeksiyon (son ~6 ayın bileşik aylık artışına göre) -----
+  // ----- projeksiyon (seçilebilir baz dönem) -----
   let projInner='';
   {
-    const base=entryNearDaysAgo(s,182)||s[0];
+    const PB=[['3a','3 Ay',91],['6a','6 Ay',182],['1y','1 Yıl',365],['2y','2 Yıl',730],['3y','3 Yıl',1095],['all','Tümü',null]];
+    const pb=PB.find(x=>x[0]===projBase)||PB[1];
+    const base=pb[2]?(entryNearDaysAgo(s,pb[2])||s[0]):s[0];
+    const seg='<div class="projseg">'+PB.map(x=>'<button onclick="setProjBase(&quot;'+x[0]+'&quot;)" class="'+(x[0]===projBase?'on':'')+'">'+x[1]+'</button>').join('')+'</div>';
     const dd=base?(dObj(cur.date).getTime()-dObj(base.date).getTime())/86400000:0;
     if(s.length>=3&&dd>=28&&total(base)>0){
       const months=dd/30.44;
@@ -497,10 +503,10 @@ function renderPanel(){
         return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4.5px 0;border-bottom:1px solid var(--border)"><span style="font-size:12.5px;color:var(--muted)">'+p[0]+'</span><span class="num" style="font-size:13.5px">'+fmtTL(v)+'</span></div>';
       }).join('');
       projInner='<div class="asof">Projeksiyon · aylık ort. <span class="num" style="color:'+(mRate>=0?'var(--pos)':'var(--neg)')+'">'+fmtPct(mRate*100)+'</span> ('+fmtDate(base.date)+' bazlı)</div>'+
-        projRows+
-        '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Son dönem hızınızın aynen sürdüğü varsayımıyla, TL bazında ve nominaldir (enflasyon düşülmemiştir); garanti değildir.</div>';
+        seg+projRows+
+        '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Seçili dönemin hızının aynen sürdüğü varsayımıyla, TL bazında ve nominaldir (enflasyon düşülmemiştir); garanti değildir.</div>';
     } else {
-      projInner='<div class="asof">Projeksiyon</div><div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">Projeksiyon için en az ~1 aylık veri aralığı gerekiyor. Kayıt girdikçe burada 3 ay – 10 yıl tahminleri belirecek.</div>';
+      projInner='<div class="asof">Projeksiyon</div>'+seg+'<div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6">Bu baz dönem için yeterli veri yok (en az ~1 aylık aralık gerekir). Farklı bir dönem seçin ya da kayıt girmeye devam edin.</div>';
     }
   }
   return ''+
@@ -782,7 +788,7 @@ function renderAlloc(){
     const cells=types.map(tp=>{
       const pct=Number(al[tp.key])||0; const amt=pct/100*catVal;
       return '<div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">'+tp.label+' <span class="num" style="color:var(--faint)">%'+trNum(pct,0)+'</span></label>'+
-      '<input class="num" data-tk="'+tp.key+'" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:16px;padding:8px 9px;border-radius:8px" inputmode="decimal" placeholder="₺" value="'+(pct>0?Math.round(amt):'')+'"'+(catVal<=0?' disabled':'')+' oninput="setCatAllocAmt(&quot;'+cat.key+'&quot;,&quot;'+tp.key+'&quot;,this)" onchange="render()"></div>'; }).join('');
+      '<input class="num" data-tk="'+tp.key+'" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:16px;padding:8px 9px;border-radius:8px" inputmode="decimal" placeholder="₺" value="'+(pct>0?Math.round(amt):'')+'"'+(catVal<=0?' disabled':'')+' oninput="setCatAllocAmt(&quot;'+cat.key+'&quot;,&quot;'+tp.key+'&quot;,this)" onchange="render()" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;"></div>'; }).join('');
     return '<div style="border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:10px;background:var(--surface2)">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:8px">'+
         '<span style="font-size:13.5px;font-weight:500">'+cat.label+'</span>'+
@@ -838,7 +844,7 @@ async function addAllocTypeInModal(){
 async function saveAlloc(){
   const date=document.getElementById('a_date').value;
   const err=document.getElementById('aerr');
-  if(!date){err.textContent='Lütfen tarih seçin.';return;}
+  if(!date){err.textContent='Tarihi GG.AA.YYYY biçiminde girin (örn. 11.07.2026).';return;}
   const vals={}; let t=0;
   document.querySelectorAll('#modal .av').forEach(i=>{ const v=parseNum(i.value); vals[i.dataset.k]=v; t+=v; });
   if(t<=0){err.textContent='En az bir türe değer girin.';return;}
@@ -937,23 +943,23 @@ function openEntry(id, draft){
   let date,usd,gold,vals;
   if(draft){ date=draft.date; usd=draft.usd; gold=draft.gold; vals=draft.vals||{}; }
   else if(editing){ date=editing.date; usd=editing.usdTl; gold=editing.gramXau; vals=editing.values?{...editing.values}:{}; }
-  else { date=nextSaturday(); usd=last?last.usdTl:''; gold=last?last.gramXau:''; vals=last&&last.values?{...last.values}:{}; }
+  else { date=new Date().toISOString().slice(0,10); usd=last?last.usdTl:''; gold=last?last.gramXau:''; vals=last&&last.values?{...last.values}:{}; }
 
   const catLines=settings.categories.map(c=>{
     const raw=(vals&&vals[c.key]!=null)?vals[c.key]:'';
     const v=(raw===''||raw===0&&!draft&&!editing)?'':raw;
     return '<div class="catline"><label>'+c.label+'</label>'+
-      '<input class="num cv" data-k="'+c.key+'" value="'+(v===''?'':v)+'" inputmode="decimal" oninput="liveSum()" placeholder="0"></div>';
+      '<input class="num cv" data-k="'+c.key+'" value="'+(v===''?'':v)+'" inputmode="decimal" oninput="liveSum()" placeholder="0" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;;liveSum()" onblur="if(!this.value){this.value=this.dataset.prev||&quot;&quot;;liveSum()}"></div>';
   }).join('');
 
   document.getElementById('modal').innerHTML=''+
     '<h2>'+(editing?'Kaydı düzenle':'Yeni haftalık kayıt')+'</h2>'+
     '<p class="mp">Tarih, kurlar ve kategori değerlerini girin. Toplam otomatik hesaplanır.</p>'+
     '<div class="row2">'+
-      '<div class="field"><label>Tarih</label><input id="f_date" type="date" value="'+date+'"></div>'+
-      '<div class="field"><label>USD/TL kuru</label><input id="f_usd" class="num" value="'+usd+'" inputmode="decimal" placeholder="46,30"></div>'+
+      '<div class="field"><label>Tarih</label><input id="f_date" class="num" inputmode="numeric" maxlength="10" placeholder="GG.AA.YYYY" value="'+fmtDate(date)+'" oninput="dateMask(this)" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;"></div>'+
+      '<div class="field"><label>USD/TL kuru</label><input id="f_usd" class="num" value="'+usd+'" inputmode="decimal" placeholder="46,30" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;"></div>'+
     '</div>'+
-    '<div class="field"><label>Gram altın (₺)</label><input id="f_gold" class="num" value="'+gold+'" inputmode="decimal" placeholder="6.350"></div>'+
+    '<div class="field"><label>Gram altın (₺)</label><input id="f_gold" class="num" value="'+gold+'" inputmode="decimal" placeholder="6.350" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;"></div>'+
     '<div style="display:flex;align-items:center;gap:10px;margin:-4px 0 13px;flex-wrap:wrap"><button type="button" class="iconbtn" id="ratebtn" onclick="fetchRates()">↻ Kurları internetten çek</button><span id="ratestat" style="font-size:11.5px;color:var(--muted)"></span></div>'+
     '<div class="catinputs">'+
       '<div class="ch"><span>Kategori değerleri (₺)</span>'+(last&&!editing&&!draft?'<span style="text-transform:none;letter-spacing:0;color:var(--muted);cursor:pointer" onclick="clearCats()">temizle</span>':'')+'</div>'+
@@ -994,11 +1000,20 @@ function readCats(){
 function liveSum(){ const {t}=readCats(); const el=document.getElementById('livesum'); if(el) el.textContent=fmtTL(t); }
 function clearCats(){ document.querySelectorAll('#modal .cv').forEach(i=>i.value=''); liveSum(); }
 function parseNum(s){ if(s==null) return 0; s=(''+s).replace(/\s/g,'').replace(/\./g,'').replace(',','.'); const n=parseFloat(s); return isNaN(n)?0:n; }
+function dateMask(el){ let v=el.value.replace(/\D/g,'').slice(0,8); let o=v.slice(0,2); if(v.length>2)o+='.'+v.slice(2,4); if(v.length>4)o+='.'+v.slice(4,8); el.value=o; }
+function parseTrDate(sv){ if(!sv) return null; sv=(''+sv).trim();
+  let m=sv.match(/^(\d{4})-(\d{2})-(\d{2})$/); if(m) sv=m[3]+'.'+m[2]+'.'+m[1];
+  m=sv.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/); if(!m) return null;
+  const d=+m[1],mo=+m[2],y=+m[3];
+  if(y<2000||y>2100||mo<1||mo>12||d<1||d>31) return null;
+  const dt=new Date(y,mo-1,d); if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d) return null;
+  const p=n=>(n<10?'0':'')+n; return y+'-'+p(mo)+'-'+p(d);
+}
 function parseRate(s){ if(s==null) return 0; s=(''+s).trim().replace(',','.'); const n=parseFloat(s); return isNaN(n)?0:n; }
 
 async function saveEntry(){
   const id=modalEditId;
-  const date=document.getElementById('f_date').value;
+  const date=parseTrDate(document.getElementById('f_date').value);
   const usd=parseRate(document.getElementById('f_usd').value);
   const gold=parseNum(document.getElementById('f_gold').value);
   const err=document.getElementById('ferr');
@@ -1116,6 +1131,8 @@ async function resetAll(){
   entries=[]; allocs=[]; settings=defaultSettings(); await sset(KEY_E,entries); await sset(KEY_S,settings); await sset(KEY_A,allocs); render();
 }
 
+function setProjBase(k){ projBase=k; window.__heroFocus=1; render(); }
+
 /* ---------- PIN kilidi ---------- */
 async function pinHash(sv){ try{ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('portfoy|'+sv)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
   catch(e){ let h=5381; const q='portfoy|'+sv; for(let i=0;i<q.length;i++){ h=((h<<5)+h+q.charCodeAt(i))>>>0; } return 'x'+h.toString(16); } }
@@ -1181,6 +1198,8 @@ function wireDynamic(){
   if(rs) rs.querySelectorAll('button').forEach(b=>b.onclick=()=>{chartRange=b.dataset.cr;render();});
   const rsa=document.getElementById('rangeStart'); if(rsa) rsa.onchange=()=>{rangeStart=rsa.value;render();};
   const rsb=document.getElementById('rangeEnd'); if(rsb) rsb.onchange=()=>{rangeEnd=rsb.value;render();};
+  const hc=document.querySelector('.herocar');
+  if(hc&&window.__heroFocus){ const sl=hc.children[window.__heroFocus]; if(sl) requestAnimationFrame(()=>{ hc.scrollLeft=sl.offsetLeft-hc.offsetLeft; }); window.__heroFocus=0; }
   const car=document.querySelector('.tgtcarousel');
   if(car&&typeof window.__tgtFocus==='number'){ const sl=car.children[window.__tgtFocus];
     if(sl) requestAnimationFrame(()=>{ car.scrollLeft=Math.max(0,sl.offsetLeft-car.offsetLeft); }); }
