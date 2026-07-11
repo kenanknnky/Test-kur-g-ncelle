@@ -870,7 +870,7 @@ function renderSettings(){
     '<div class="field" style="margin:9px 0 0"><label>Tarih (ops.)</label><input type="date" value="'+(g.date||'')+'" onchange="editTarget('+i+',\'date\',this.value)"></div>'+
     '<div class="row2" style="margin-top:9px">'+
       '<div class="field" style="margin:0"><label>Tahmini kur (USD/TL)</label><input class="num" value="'+(g.estRate||'')+'" inputmode="decimal" oninput="editTarget('+i+',\'estRate\',this.value)" placeholder="örn. 48,50"></div>'+
-      '<div class="field" style="margin:0"><label>Gerçekleşen kur</label><input class="num" value="'+(g.actRate||'')+'" inputmode="decimal" oninput="editTarget('+i+',\'actRate\',this.value)" placeholder="günü gelince"></div>'+
+      '<div class="field" style="margin:0"><label>Gerçekleşen kur</label><div style="display:flex;gap:6px"><input class="num" style="flex:1;min-width:0" value="'+(g.actRate||'')+'" inputmode="decimal" oninput="editTarget('+i+',\'actRate\',this.value)" placeholder="günü gelince"><button type="button" class="iconbtn" style="flex:0 0 auto" onclick="fetchActRate('+i+')">↻</button></div></div>'+
     '</div>'+
     '<button class="iconbtn danger" style="margin-top:10px" onclick="removeTarget('+i+')">Bu hedefi kaldır</button>'+
   '</div>').join(''):'<p class="d" style="margin:0 0 10px">Henüz hedef yok.</p>';
@@ -1019,6 +1019,36 @@ async function delEntry(id){
 function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
 
 /* ---------- güncel kur çekme (ücretsiz kaynaklar, sıralı yedekli) ---------- */
+async function fetchUsdRate(){
+  const get=async(url,ms)=>{ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||8000);
+    try{ const r=await fetch(url,{signal:c.signal,cache:'no-store',mode:'cors'}); clearTimeout(t); if(!r.ok) return null; return await r.json(); }
+    catch(e){ clearTimeout(t); return null; } };
+  const num=x=>{ if(x==null) return null; if(typeof x==='object') x=(x['Satış']??x.Selling??x['Alış']??x.Buying); if(typeof x==='string') x=x.replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',','.'); const n=parseFloat(x); return (isNaN(n)||n<=0)?null:n; };
+  const bust='?t='+Date.now();
+  let j=await get('https://finans.truncgil.com/v4/today.json'+bust,6000); let r=j?num(j.USD):null;
+  if(!r){ j=await get('https://finans.truncgil.com/today.json'+bust,5000); if(j) r=num(j.USD); }
+  if(!r){ j=await get('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json'+bust); if(j&&j.usd&&Number(j.usd.try)>0) r=Number(j.usd.try); }
+  if(!r){ j=await get('https://api.frankfurter.app/latest?from=USD&to=TRY'); if(j&&j.rates&&j.rates.TRY) r=Number(j.rates.TRY); }
+  if(!r){ j=await get('https://open.er-api.com/v6/latest/USD'); if(j&&j.rates&&j.rates.TRY) r=Number(j.rates.TRY); }
+  return r;
+}
+async function fetchActRate(i){
+  const g=settings.targets[i]; if(!g) return;
+  const r=await fetchUsdRate();
+  if(!r){ alert('Kur çekilemedi — internet bağlantısını kontrol edin.'); return; }
+  g.actRate=Math.round(r*100)/100; await sset(KEY_S,settings); render();
+}
+async function autoFillActRates(){
+  try{
+    if(!Array.isArray(settings.targets)) return;
+    const today=new Date(); today.setHours(0,0,0,0);
+    const due=settings.targets.filter(g=>g.date&&!g.actRate&&dObj(g.date).getTime()<=today.getTime()&&(today.getTime()-dObj(g.date).getTime())<=7*86400000);
+    if(!due.length) return;
+    const r=await fetchUsdRate(); if(!r) return;
+    due.forEach(g=>{ g.actRate=Math.round(r*100)/100; });
+    await sset(KEY_S,settings); render();
+  }catch(e){}
+}
 async function fetchRates(){
   const st=document.getElementById('ratestat'), btn=document.getElementById('ratebtn');
   if(btn) btn.disabled=true;
@@ -1093,7 +1123,7 @@ function showLock(){
   const el=document.getElementById('lock');
   el.innerHTML='<div class="logo" style="width:52px;height:52px"></div>'+
     '<div style="font-size:17px;font-weight:600">Portföy kilitli</div>'+
-    '<input id="pin_in" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••" onkeydown="if(event.key===\'Enter\')tryUnlock()">'+
+    '<input id="pin_in" type="password" inputmode="numeric" maxlength="'+settings.pin.len+'" autocomplete="off" placeholder="••••" onkeydown="if(event.key===\'Enter\')tryUnlock()" oninput="if(this.value.length>='+settings.pin.len+')tryUnlock()">'+
     '<div class="lerr" id="pin_err"></div>'+
     '<button class="lbtn" onclick="tryUnlock()">Aç</button>'+
     '<button class="btn-ghost" onclick="forgotPin()">PIN\'i unuttum</button>';
@@ -1198,5 +1228,6 @@ window.addEventListener('resize',()=>{ if(currentTab==='grafik') drawChart(); })
   await sset(KEY_S,settings);
   render();
   if(settings.pin&&settings.pin.hash) showLock();
+  autoFillActRates();
 })();
 </script>
