@@ -224,7 +224,7 @@ tr.editrow:hover{background:var(--surface2)}
 <script>
 /* ---------- storage ---------- */
 const KEY_E='portfolio_entries_v1', KEY_S='portfolio_settings_v1', KEY_A='portfolio_alloc_v1';
-const APP_VER='v32';
+const APP_VER='v34';
 const mem={};
 async function sget(k){
   if(window.storage){ try{ const r=await window.storage.get(k,false); return r?JSON.parse(r.value):null; }catch(e){ return null; } }
@@ -242,22 +242,19 @@ let entries=[], settings=null, allocs=[], period='h', chartLens='compare', chart
 
 /* ---------- seed ---------- */
 function seed(){
+  // Örnek/deneme verileri — kendi kayıtlarınızı girdikçe ya da yedek yükleyince yerini gerçek verileriniz alır.
   const hist=[
-    ['2026-01-17',43.23,6650,3120850],['2026-01-24',43.36,6950,3241000],
-    ['2026-01-31',43.46,7200,3489600],['2026-02-07',43.59,7350,3271800],
-    ['2026-02-14',43.74,7500,3376378],['2026-02-21',43.85,7600,3376610],
-    ['2026-02-28',43.94,7450,3457840],['2026-03-07',44.05,7300,3474070],
-    ['2026-03-14',44.16,7150,3509641],['2026-03-21',44.35,7050,3480800],
-    ['2026-03-28',44.43,6950,3483447],['2026-04-04',44.57,6850,3554453],
-    ['2026-04-11',44.66,6780,3668395],['2026-04-18',44.84,6720,3740613],
-    ['2026-04-25',45.00,6680,3752564],['2026-05-02',45.11,6660,3760960],
-    ['2026-05-09',45.33,6850,3864164],['2026-05-16',45.53,6644,3934781],
-    ['2026-05-23',45.70,6650,3806594],['2026-06-06',46.06,6410,3916151],
+    ['2026-05-02',40.00,5000,1000000],['2026-05-09',40.10,5030,1012000],
+    ['2026-05-16',40.25,5060,1021000],['2026-05-23',40.40,5045,1035000],
+    ['2026-05-30',40.55,5080,1048000],['2026-06-06',40.70,5110,1060000],
+    ['2026-06-13',40.85,5140,1076000],['2026-06-20',41.00,5125,1088000],
+    ['2026-06-27',41.20,5160,1101000],
   ].map((r,i)=>({id:'h'+i,date:r[0],usdTl:r[1],gramXau:r[2],values:null,totalOverride:r[3]}));
-  hist.push({id:'snap',date:'2026-06-20',usdTl:46.30,gramXau:6350,
-    values:{nakit:17500,bes:355000,fon:3473200,hisse:0,midas:165980,tatil:171400,diger:0},totalOverride:null});
+  hist.push({id:'snap',date:'2026-07-04',usdTl:41.40,gramXau:5190,
+    values:{nakit:60000,bes:180000,fon:550000,hisse:110000,midas:150000,tatil:70000,diger:0},totalOverride:null});
   return hist;
 }
+
 function defaultSettings(){
   return {
     version:2,
@@ -266,7 +263,7 @@ function defaultSettings(){
       {key:'hisse',label:'Hisse'},{key:'midas',label:'Midas'},{key:'tatil',label:'Tatil Fonu'},
       {key:'diger',label:'Diğer'},
     ],
-    startDate:'2025-07-19', startValue:1580389, targets:[],
+    startDate:null, startValue:null, targets:[],
     allocTypes:[{key:'tl',label:'TL'},{key:'doviz',label:'Döviz'},{key:'emtia',label:'Emtia'}]
   };
 }
@@ -494,7 +491,7 @@ function renderPanel(){
   }
 
   // ----- projeksiyon (nominal + reel) -----
-  let projInner='', realInner='';
+  let projInner='';
   {
     const PB=[['3a','3 Ay',91],['6a','6 Ay',182],['1y','1 Yıl',365],['2y','2 Yıl',730],['3y','3 Yıl',1095],['all','Tümü',null]];
     const pb=PB.find(x=>x[0]===projBase)||PB[1];
@@ -515,48 +512,15 @@ function renderPanel(){
     } else {
       projInner='<div class="asof">Projeksiyon</div>'+seg+'<div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6">Bu baz dönem için yeterli veri yok (en az ~1 aylık aralık gerekir). Farklı bir dönem seçin ya da kayıt girmeye devam edin.</div>';
     }
-    // ---- reel (enflasyondan arındırılmış) ----
-    const inf=settings.inflation, cpi=settings.cpi;
-    const IW=[['1a','1 Ay',1],['3a','3 Ay',3],['6a','6 Ay',6],['1y','1 Yıl',12],['2y','2 Yıl',24],['3y','3 Yıl',36]];
-    let infMonthly=null, infDesc='';
-    if(settings.inflMode==='manual'&&inf&&inf.annual>0){
-      infMonthly=Math.pow(1+inf.annual/100,1/12)-1; infDesc='elle: yıllık %'+trNum(inf.annual,1);
-    } else if(cpi&&cpi.obs){
-      const w=IW.find(x=>x[0]===(settings.inflBase||'1y'))||IW[3];
-      const m=cpiMonthlyInf(w[2]);
-      if(m!=null){ infMonthly=m; infDesc='son '+w[1].toLowerCase()+' TÜFE · yıllık eşdeğeri %'+trNum((Math.pow(1+m,12)-1)*100,1)+' ('+cpi.src+' '+cpi.last+')'; }
-    } else if(inf&&inf.annual>0){
-      infMonthly=Math.pow(1+inf.annual/100,1/12)-1; infDesc='yıllık %'+trNum(inf.annual,1)+(inf.year&&inf.year!=='elle'?' (Dünya Bankası '+inf.year+')':'');
-    }
-    const iwSeg=cpi&&cpi.obs?('<div class="projseg">'+IW.map(x=>'<button onclick="setInflBase(&quot;'+x[0]+'&quot;)" class="'+((settings.inflMode!=='manual'&&(settings.inflBase||'1y')===x[0])?'on':'')+'">'+x[1]+'</button>').join('')+'</div>'):'';
-    const infBar='<div style="display:flex;gap:8px;align-items:center;margin:8px 0 2px;flex-wrap:wrap">'+
-      '<button type="button" class="iconbtn" onclick="fetchInflation()">↻ TÜFE çek</button>'+
-      '<span style="font-size:11.5px;color:var(--muted)">ya da yıllık %</span>'+
-      '<input class="num" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:15px;padding:5px 8px;border-radius:7px" inputmode="decimal" value="'+(settings.inflMode==='manual'&&inf?inf.annual:'')+'" oninput="setInflAnnual(this.value)" onchange="window.__heroFocus=0;render()" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;">'+
-      '<span id="inflstat" style="font-size:11px;color:var(--faint)"></span></div>'+iwSeg;
-    if(mRate!=null&&infMonthly!=null){
-      const rm=(1+mRate)/(1+infMonthly)-1;
-      realInner='<div class="asof">Reel projeksiyon · enflasyon sonrası aylık <span class="num" style="color:'+(rm>=0?'var(--pos)':'var(--neg)')+'">'+fmtPct(rm*100)+'</span></div>'+
-        infBar+rowsFor(rm)+
-        '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Bugünkü alım gücüyle · enflasyon: '+infDesc+' · büyüme hızı '+fmtDate(base.date)+' bazlı. Garanti değildir.</div>';
-    } else if(mRate!=null){
-      realInner='<div class="asof">Reel projeksiyon · enflasyondan arındırılmış</div>'+infBar+
-        '<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">↻ TÜFE çek ile resmî endeksi alın (1 ay – 3 yıl pencereleri açılır) ya da yıllık oranı elle yazın.</div>';
-    } else {
-      realInner='<div class="asof">Reel projeksiyon</div>'+infBar+
-        '<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">Projeksiyon için yeterli veri birikince burada enflasyondan arındırılmış hali görünecek.</div>';
-    }
   }
-  if(window.__heroFocus==null) window.__heroFocus=1;
   return ''+
   '<div class="herocar">'+
-    '<div class="heroslide card" style="margin-bottom:0">'+realInner+'</div>'+
     '<div class="heroslide card hero" style="margin-bottom:0">'+
       '<div class="asof">'+fmtDate(cur.date)+' itibarıyla toplam servet</div>'+
       '<div class="big num">'+fmtTL(t)+'</div>'+
       (wk&&!wk.na?'<span class="chip '+(wk.pct>=0?'pos':'neg')+'">'+(wk.pct>=0?'▲':'▼')+' '+fmtPct(wk.pct)+' · '+(wk.abs>=0?'+':'−')+fmtTL(Math.abs(wk.abs))+'<span class="since">son haftaya göre</span></span>':'')+
       allocMini+
-      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:10px"><span>← Reel projeksiyon</span><span>Projeksiyon →</span></div>'+
+      '<div style="text-align:right;font-size:11px;color:var(--faint);margin-top:10px">Projeksiyon için kaydırın →</div>'+
     '</div>'+
     '<div class="heroslide card" style="margin-bottom:0">'+projInner+'</div>'+
   '</div>'+
@@ -964,7 +928,7 @@ function renderSettings(){
     '<h3>Sıfırla</h3><p class="d">Tüm kayıtları siler. Geri alınamaz.</p>'+
     '<button class="iconbtn danger" onclick="resetAll()">Tüm verileri sil</button>'+
   '</div>'+
-  '<p class="note">Not: En güncel kayıttaki ('+fmtDate('2026-06-20')+') USD/TL ve gram altın değerleri tahminîdir — Kayıtlar sekmesinden düzenleyebilirsiniz. Midas artık çarpansız normal bir kategori (165.980 ₺).</p>'+
+  '<p class="note">Not: Uygulama ilk açılışta örnek (göstermelik) verilerle gelir; kendi kayıtlarınızı girdikçe ya da "Yedek yükle" ile gerçek verilerinizi aktardığınızda örnekler tamamen ortadan kalkar.</p>'+
   '<p class="note" style="text-align:center">Uygulama sürümü: '+APP_VER+'</p>';
 }
 
@@ -1166,90 +1130,7 @@ async function resetAll(){
   entries=[]; allocs=[]; settings=defaultSettings(); await sset(KEY_E,entries); await sset(KEY_S,settings); await sset(KEY_A,allocs); render();
 }
 
-function cpiMonthlyInf(n){
-  const c=settings.cpi; if(!c||!c.obs||c.obs.length<n+1) return null;
-  const a=c.obs[c.obs.length-1], b=c.obs[c.obs.length-1-n];
-  if(!a||!b||!(a[1]>0)||!(b[1]>0)) return null;
-  return Math.pow(a[1]/b[1],1/n)-1;
-}
-async function setInflBase(k){ settings.inflBase=k; settings.inflMode='auto'; await sset(KEY_S,settings); window.__heroFocus=0; render(); }
-async function fetchCpiCore(){
-  const get=async(url,ms)=>{ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||9000);
-    try{ const r=await fetch(url,{signal:c.signal,cache:'no-store',mode:'cors'}); clearTimeout(t); if(!r.ok) return null; return await r.json(); }
-    catch(e){ clearTimeout(t); return null; } };
-  const diag=[]; let best=null;
-  try{ const p=await get('https://finans.truncgil.com/v4/today.json?t='+Date.now(),5000); diag.push(p?'NET✓':'NET✗'); window.__netOk=!!p; }catch(e){ diag.push('NET✗'); window.__netOk=false; }
-  const consider=c=>{ if(!c) return false;
-    if(!best||c.last>best.last) best=c;
-    const lastD=new Date(c.last.slice(0,7)+'-01');
-    return isFinite(lastD.getTime())&&(Date.now()-lastD.getTime())/86400000<130; };
-  // 1) Eurostat resmi API (Türkiye HICP, aylık endeks)
-  try{
-    const j=await get('https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_midx?format=JSON&lang=en&geo=TR&coicop=CP00&unit=I15&sinceTimePeriod=2018-01&t='+Date.now(),9000);
-    const ti=j&&j.dimension&&j.dimension.time&&j.dimension.time.category&&j.dimension.time.category.index;
-    if(ti&&j.value){
-      const periods=Object.keys(ti).sort(); const obs=[];
-      for(const p of periods){ const v=Number(j.value[ti[p]]); if(isFinite(v)&&v>0) obs.push([p,v]); }
-      if(obs.length>=13){ diag.push('ES✓'); if(consider({src:'Eurostat',obs:obs.slice(-45),last:obs[obs.length-1][0]})) { window.__cpiDiag=diag; return best; } }
-      else diag.push('ES✗');
-    } else diag.push('ES✗');
-  }catch(e){ diag.push('ES✗'); }
-  // 2) DBnomics adayları
-  const cands=[
-    ['DBe','https://api.db.nomics.world/v22/series/Eurostat/prc_hicp_midx/M.I15.CP00.TR?observations=1&format=json'],
-    ['DBi','https://api.db.nomics.world/v22/series/IMF/CPI/M.TR.PCPI_IX?observations=1&format=json'],
-    ['DBo','https://api.db.nomics.world/v22/series/OECD/PRICES_CPI/TUR.CPALTT01.IXOB.M?observations=1&format=json']
-  ];
-  for(const cd of cands){
-    const j=await get(cd[1]+'&t='+Date.now(),8000);
-    try{
-      const d=j&&j.series&&j.series.docs&&j.series.docs[0];
-      if(!d||!d.period||!d.value){ diag.push(cd[0]+'✗'); continue; }
-      const obs=[]; for(let i=0;i<d.period.length;i++){ const v=Number(d.value[i]); if(isFinite(v)&&v>0) obs.push([String(d.period[i]),v]); }
-      if(obs.length<13){ diag.push(cd[0]+'✗'); continue; }
-      diag.push(cd[0]+'✓');
-      if(consider({src:cd[0]==='DBi'?'IMF':(cd[0]==='DBo'?'OECD':'Eurostat'),obs:obs.slice(-45),last:obs[obs.length-1][0]})) break;
-    }catch(e){ diag.push(cd[0]+'✗'); }
-  }
-  window.__cpiDiag=diag;
-  return best;
-}
-async function applyCpi(best){
-  settings.cpi=best; settings.cpiTs=Date.now();
-  if(settings.inflMode!=='manual') settings.inflMode='auto';
-  if(!settings.inflBase) settings.inflBase='1y';
-  await sset(KEY_S,settings);
-}
-async function fetchInflation(){
-  const st=document.getElementById('inflstat'); if(st) st.textContent='Çekiliyor…';
-  const best=await fetchCpiCore();
-  if(best){ settings.inflMode='auto'; await applyCpi(best); window.__heroFocus=0; render(); return; }
-  try{
-    const c=new AbortController(); const tm=setTimeout(()=>c.abort(),9000);
-    const r=await fetch('https://api.worldbank.org/v2/country/TUR/indicator/FP.CPI.TOTL.ZG?format=json&per_page=6&t='+Date.now(),{signal:c.signal,cache:'no-store',mode:'cors'});
-    clearTimeout(tm);
-    const j=await r.json();
-    const arr=(j&&j[1])||[]; const hit=arr.find(x=>x&&x.value!=null);
-    if(!hit) throw 0;
-    settings.inflation={annual:Math.round(Number(hit.value)*10)/10,year:hit.date}; settings.inflMode='fallback';
-    await sset(KEY_S,settings); window.__heroFocus=0; render();
-  }catch(e){ if(st){
-    const dg=(window.__cpiDiag||[]).join(' ')||'-';
-    st.textContent= window.__netOk===false
-      ? 'Dış bağlantılar tamamen kapalı görünüyor — Claude önizlemesindeyseniz bu normaldir; telefondaki uygulamada deneyin.'
-      : 'Çekilemedi ['+dg+' WB✗ · '+APP_VER+'] — bu kodu Claude\'a iletin';
-  } }
-}
-async function autoFetchCpi(){
-  try{
-    const fresh=settings.cpi&&settings.cpiTs&&(Date.now()-settings.cpiTs)<7*86400000;
-    if(fresh) return;
-    const best=await fetchCpiCore();
-    if(best){ await applyCpi(best); if(currentTab==='panel') render(); }
-  }catch(e){}
-}
-async function setInflAnnual(v){ const n=parseRate(v); if(n>0){ settings.inflation={annual:n,year:'elle'}; settings.inflMode='manual'; await sset(KEY_S,settings); } }
-function setProjBase(k){ projBase=k; window.__heroFocus=2; render(); }
+function setProjBase(k){ projBase=k; window.__heroFocus=1; render(); }
 
 /* ---------- PIN kilidi ---------- */
 async function pinHash(sv){ try{ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('portfoy|'+sv)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
@@ -1341,7 +1222,7 @@ window.addEventListener('resize',()=>{ if(currentTab==='grafik') drawChart(); })
   entries=await sget(KEY_E); settings=await sget(KEY_S); allocs=await sget(KEY_A);
   if(!settings){ settings=defaultSettings(); await sset(KEY_S,settings); }
   if(!entries){ entries=seed(); await sset(KEY_E,entries); }
-  if(!Array.isArray(allocs)){ allocs=[{id:'a0',date:'2026-07-03',values:{tl:2326447,doviz:668423,emtia:1012583}}]; await sset(KEY_A,allocs); }
+  if(!Array.isArray(allocs)){ allocs=[]; await sset(KEY_A,allocs); }
   if(!Array.isArray(settings.allocTypes)||!settings.allocTypes.length){ settings.allocTypes=[{key:'tl',label:'TL'},{key:'doviz',label:'Döviz'},{key:'emtia',label:'Emtia'}]; await sset(KEY_S,settings); }
   if(!settings.catAlloc){ settings.catAlloc={}; await sset(KEY_S,settings); }
   if(!settings.version || settings.version<2){
@@ -1366,6 +1247,5 @@ window.addEventListener('resize',()=>{ if(currentTab==='grafik') drawChart(); })
   render();
   if(settings.pin&&settings.pin.hash) showLock();
   autoFillActRates();
-  autoFetchCpi();
 })();
 </script>

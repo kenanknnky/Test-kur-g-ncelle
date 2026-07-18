@@ -1,5 +1,5 @@
 /* Portföy çevrimdışı önbellek — v32: sayfa için önce ağ */
-const C='portfoy-cache-v32';
+const C='portfoy-cache-v34';
 const ASSETS=['./','./index.html','./manifest.json'];
 self.addEventListener('install',e=>{ self.skipWaiting(); e.waitUntil(caches.open(C).then(c=>c.addAll(ASSETS).catch(()=>{}))); });
 self.addEventListener('activate',e=>{ e.waitUntil(Promise.all([
