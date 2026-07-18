@@ -492,36 +492,70 @@ function renderPanel(){
     breakdown='<div class="card empty">Kategori dağılımı için kategori kırılımlı bir kayıt ekleyin.</div>';
   }
 
-  // ----- projeksiyon (seçilebilir baz dönem) -----
-  let projInner='';
+  // ----- projeksiyon (nominal + reel) -----
+  let projInner='', realInner='';
   {
     const PB=[['3a','3 Ay',91],['6a','6 Ay',182],['1y','1 Yıl',365],['2y','2 Yıl',730],['3y','3 Yıl',1095],['all','Tümü',null]];
     const pb=PB.find(x=>x[0]===projBase)||PB[1];
     const base=pb[2]?(entryNearDaysAgo(s,pb[2])||s[0]):s[0];
     const seg='<div class="projseg">'+PB.map(x=>'<button onclick="setProjBase(&quot;'+x[0]+'&quot;)" class="'+(x[0]===projBase?'on':'')+'">'+x[1]+'</button>').join('')+'</div>';
     const dd=base?(dObj(cur.date).getTime()-dObj(base.date).getTime())/86400000:0;
-    if(s.length>=3&&dd>=28&&total(base)>0){
-      const months=dd/30.44;
-      const mRate=Math.pow(t/total(base),1/months)-1;
-      const projRows=[['3 Ay',3],['6 Ay',6],['1 Yıl',12],['2 Yıl',24],['3 Yıl',36],['5 Yıl',60],['10 Yıl',120]].map(p=>{
-        const v=t*Math.pow(1+mRate,p[1]);
-        return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4.5px 0;border-bottom:1px solid var(--border)"><span style="font-size:12.5px;color:var(--muted)">'+p[0]+'</span><span class="num" style="font-size:13.5px">'+fmtTL(v)+'</span></div>';
-      }).join('');
+    const HOR=[['3 Ay',3],['6 Ay',6],['1 Yıl',12],['2 Yıl',24],['3 Yıl',36],['5 Yıl',60],['10 Yıl',120]];
+    const rowsFor=r=>HOR.map(p=>{
+      const v=t*Math.pow(1+r,p[1]);
+      return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4.5px 0;border-bottom:1px solid var(--border)"><span style="font-size:12.5px;color:var(--muted)">'+p[0]+'</span><span class="num" style="font-size:13.5px">'+fmtTL(v)+'</span></div>';
+    }).join('');
+    let mRate=null;
+    if(s.length>=3&&dd>=28&&total(base)>0){ mRate=Math.pow(t/total(base),1/(dd/30.44))-1; }
+    if(mRate!=null){
       projInner='<div class="asof">Projeksiyon · aylık ort. <span class="num" style="color:'+(mRate>=0?'var(--pos)':'var(--neg)')+'">'+fmtPct(mRate*100)+'</span> ('+fmtDate(base.date)+' bazlı)</div>'+
-        seg+projRows+
+        seg+rowsFor(mRate)+
         '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Seçili dönemin hızının aynen sürdüğü varsayımıyla, TL bazında ve nominaldir (enflasyon düşülmemiştir); garanti değildir.</div>';
     } else {
       projInner='<div class="asof">Projeksiyon</div>'+seg+'<div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6">Bu baz dönem için yeterli veri yok (en az ~1 aylık aralık gerekir). Farklı bir dönem seçin ya da kayıt girmeye devam edin.</div>';
     }
+    // ---- reel (enflasyondan arındırılmış) ----
+    const inf=settings.inflation, cpi=settings.cpi;
+    const IW=[['1a','1 Ay',1],['3a','3 Ay',3],['6a','6 Ay',6],['1y','1 Yıl',12],['2y','2 Yıl',24],['3y','3 Yıl',36]];
+    let infMonthly=null, infDesc='';
+    if(settings.inflMode==='manual'&&inf&&inf.annual>0){
+      infMonthly=Math.pow(1+inf.annual/100,1/12)-1; infDesc='elle: yıllık %'+trNum(inf.annual,1);
+    } else if(cpi&&cpi.obs){
+      const w=IW.find(x=>x[0]===(settings.inflBase||'1y'))||IW[3];
+      const m=cpiMonthlyInf(w[2]);
+      if(m!=null){ infMonthly=m; infDesc='son '+w[1].toLowerCase()+' TÜFE · yıllık eşdeğeri %'+trNum((Math.pow(1+m,12)-1)*100,1)+' ('+cpi.src+' '+cpi.last+')'; }
+    } else if(inf&&inf.annual>0){
+      infMonthly=Math.pow(1+inf.annual/100,1/12)-1; infDesc='yıllık %'+trNum(inf.annual,1)+(inf.year&&inf.year!=='elle'?' (Dünya Bankası '+inf.year+')':'');
+    }
+    const iwSeg=cpi&&cpi.obs?('<div class="projseg">'+IW.map(x=>'<button onclick="setInflBase(&quot;'+x[0]+'&quot;)" class="'+((settings.inflMode!=='manual'&&(settings.inflBase||'1y')===x[0])?'on':'')+'">'+x[1]+'</button>').join('')+'</div>'):'';
+    const infBar='<div style="display:flex;gap:8px;align-items:center;margin:8px 0 2px;flex-wrap:wrap">'+
+      '<button type="button" class="iconbtn" onclick="fetchInflation()">↻ TÜFE çek</button>'+
+      '<span style="font-size:11.5px;color:var(--muted)">ya da yıllık %</span>'+
+      '<input class="num" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:15px;padding:5px 8px;border-radius:7px" inputmode="decimal" value="'+(settings.inflMode==='manual'&&inf?inf.annual:'')+'" oninput="setInflAnnual(this.value)" onchange="window.__heroFocus=0;render()" onfocus="this.dataset.prev=this.value;this.value=&quot;&quot;" onblur="if(!this.value)this.value=this.dataset.prev||&quot;&quot;">'+
+      '<span id="inflstat" style="font-size:11px;color:var(--faint)"></span></div>'+iwSeg;
+    if(mRate!=null&&infMonthly!=null){
+      const rm=(1+mRate)/(1+infMonthly)-1;
+      realInner='<div class="asof">Reel projeksiyon · enflasyon sonrası aylık <span class="num" style="color:'+(rm>=0?'var(--pos)':'var(--neg)')+'">'+fmtPct(rm*100)+'</span></div>'+
+        infBar+rowsFor(rm)+
+        '<div style="font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5">Bugünkü alım gücüyle · enflasyon: '+infDesc+' · büyüme hızı '+fmtDate(base.date)+' bazlı. Garanti değildir.</div>';
+    } else if(mRate!=null){
+      realInner='<div class="asof">Reel projeksiyon · enflasyondan arındırılmış</div>'+infBar+
+        '<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">↻ TÜFE çek ile resmî endeksi alın (1 ay – 3 yıl pencereleri açılır) ya da yıllık oranı elle yazın.</div>';
+    } else {
+      realInner='<div class="asof">Reel projeksiyon</div>'+infBar+
+        '<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6">Projeksiyon için yeterli veri birikince burada enflasyondan arındırılmış hali görünecek.</div>';
+    }
   }
+  if(window.__heroFocus==null) window.__heroFocus=1;
   return ''+
   '<div class="herocar">'+
+    '<div class="heroslide card" style="margin-bottom:0">'+realInner+'</div>'+
     '<div class="heroslide card hero" style="margin-bottom:0">'+
       '<div class="asof">'+fmtDate(cur.date)+' itibarıyla toplam servet</div>'+
       '<div class="big num">'+fmtTL(t)+'</div>'+
       (wk&&!wk.na?'<span class="chip '+(wk.pct>=0?'pos':'neg')+'">'+(wk.pct>=0?'▲':'▼')+' '+fmtPct(wk.pct)+' · '+(wk.abs>=0?'+':'−')+fmtTL(Math.abs(wk.abs))+'<span class="since">son haftaya göre</span></span>':'')+
       allocMini+
-      '<div style="text-align:right;font-size:11px;color:var(--faint);margin-top:10px">Projeksiyon için kaydırın →</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:10px"><span>← Reel projeksiyon</span><span>Projeksiyon →</span></div>'+
     '</div>'+
     '<div class="heroslide card" style="margin-bottom:0">'+projInner+'</div>'+
   '</div>'+
@@ -1130,7 +1164,70 @@ async function resetAll(){
   entries=[]; allocs=[]; settings=defaultSettings(); await sset(KEY_E,entries); await sset(KEY_S,settings); await sset(KEY_A,allocs); render();
 }
 
-function setProjBase(k){ projBase=k; window.__heroFocus=1; render(); }
+function cpiMonthlyInf(n){
+  const c=settings.cpi; if(!c||!c.obs||c.obs.length<n+1) return null;
+  const a=c.obs[c.obs.length-1], b=c.obs[c.obs.length-1-n];
+  if(!a||!b||!(a[1]>0)||!(b[1]>0)) return null;
+  return Math.pow(a[1]/b[1],1/n)-1;
+}
+async function setInflBase(k){ settings.inflBase=k; settings.inflMode='auto'; await sset(KEY_S,settings); window.__heroFocus=0; render(); }
+async function fetchCpiCore(){
+  const get=async(url,ms)=>{ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||9000);
+    try{ const r=await fetch(url,{signal:c.signal,cache:'no-store',mode:'cors'}); clearTimeout(t); if(!r.ok) return null; return await r.json(); }
+    catch(e){ clearTimeout(t); return null; } };
+  const cands=[
+    ['OECD','https://api.db.nomics.world/v22/series/OECD/DSD_PRICES%40DF_PRICES_ALL/TUR.M.N.CPI.IX._T.N.?observations=1&format=json'],
+    ['OECD','https://api.db.nomics.world/v22/series/OECD/PRICES_CPI/TUR.CPALTT01.IXOB.M?observations=1&format=json'],
+    ['Eurostat','https://api.db.nomics.world/v22/series/Eurostat/prc_hicp_midx/M.I15.CP00.TR?observations=1&format=json'],
+    ['IMF','https://api.db.nomics.world/v22/series/IMF/CPI/M.TR.PCPI_IX?observations=1&format=json']
+  ];
+  let best=null;
+  for(const cd of cands){
+    const j=await get(cd[1]+'&t='+Date.now(),8000);
+    try{
+      const d=j&&j.series&&j.series.docs&&j.series.docs[0];
+      if(!d||!d.period||!d.value) continue;
+      const obs=[]; for(let i=0;i<d.period.length;i++){ const v=Number(d.value[i]); if(isFinite(v)&&v>0) obs.push([String(d.period[i]),v]); }
+      if(obs.length<13) continue;
+      const cand={src:cd[0],obs:obs.slice(-45),last:obs[obs.length-1][0]};
+      if(!best||cand.last>best.last) best=cand;
+      const lastD=new Date(cand.last.slice(0,7)+'-01');
+      if(isFinite(lastD.getTime())&&(Date.now()-lastD.getTime())/86400000<130){ best=cand; break; }
+    }catch(e){}
+  }
+  return best;
+}
+async function applyCpi(best){
+  settings.cpi=best; settings.cpiTs=Date.now();
+  if(settings.inflMode!=='manual') settings.inflMode='auto';
+  if(!settings.inflBase) settings.inflBase='1y';
+  await sset(KEY_S,settings);
+}
+async function fetchInflation(){
+  const st=document.getElementById('inflstat'); if(st) st.textContent='Çekiliyor…';
+  const best=await fetchCpiCore();
+  if(best){ settings.inflMode='auto'; await applyCpi(best); window.__heroFocus=0; render(); return; }
+  try{
+    const c=new AbortController(); const tm=setTimeout(()=>c.abort(),9000);
+    const r=await fetch('https://api.worldbank.org/v2/country/TUR/indicator/FP.CPI.TOTL.ZG?format=json&per_page=6&t='+Date.now(),{signal:c.signal,cache:'no-store',mode:'cors'});
+    clearTimeout(tm);
+    const j=await r.json();
+    const arr=(j&&j[1])||[]; const hit=arr.find(x=>x&&x.value!=null);
+    if(!hit) throw 0;
+    settings.inflation={annual:Math.round(Number(hit.value)*10)/10,year:hit.date}; settings.inflMode='fallback';
+    await sset(KEY_S,settings); window.__heroFocus=0; render();
+  }catch(e){ if(st) st.textContent='Çekilemedi — elle girebilirsiniz'; }
+}
+async function autoFetchCpi(){
+  try{
+    const fresh=settings.cpi&&settings.cpiTs&&(Date.now()-settings.cpiTs)<7*86400000;
+    if(fresh) return;
+    const best=await fetchCpiCore();
+    if(best){ await applyCpi(best); if(currentTab==='panel') render(); }
+  }catch(e){}
+}
+async function setInflAnnual(v){ const n=parseRate(v); if(n>0){ settings.inflation={annual:n,year:'elle'}; settings.inflMode='manual'; await sset(KEY_S,settings); } }
+function setProjBase(k){ projBase=k; window.__heroFocus=2; render(); }
 
 /* ---------- PIN kilidi ---------- */
 async function pinHash(sv){ try{ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('portfoy|'+sv)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
@@ -1198,7 +1295,7 @@ function wireDynamic(){
   const rsa=document.getElementById('rangeStart'); if(rsa) rsa.onchange=()=>{rangeStart=rsa.value;render();};
   const rsb=document.getElementById('rangeEnd'); if(rsb) rsb.onchange=()=>{rangeEnd=rsb.value;render();};
   const hc=document.querySelector('.herocar');
-  if(hc&&window.__heroFocus){ const sl=hc.children[window.__heroFocus]; if(sl) requestAnimationFrame(()=>{ hc.scrollLeft=sl.offsetLeft-hc.offsetLeft; }); window.__heroFocus=0; }
+  if(hc&&window.__heroFocus!=null){ const fi=window.__heroFocus; const sl=hc.children[fi]; if(sl) requestAnimationFrame(()=>{ hc.scrollLeft=sl.offsetLeft-hc.offsetLeft; }); window.__heroFocus=null; }
   const car=document.querySelector('.tgtcarousel');
   if(car&&typeof window.__tgtFocus==='number'){ const sl=car.children[window.__tgtFocus];
     if(sl) requestAnimationFrame(()=>{ car.scrollLeft=Math.max(0,sl.offsetLeft-car.offsetLeft); }); }
@@ -1247,5 +1344,6 @@ window.addEventListener('resize',()=>{ if(currentTab==='grafik') drawChart(); })
   render();
   if(settings.pin&&settings.pin.hash) showLock();
   autoFillActRates();
+  autoFetchCpi();
 })();
 </script>
