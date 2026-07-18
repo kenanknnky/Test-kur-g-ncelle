@@ -1175,26 +1175,40 @@ async function fetchCpiCore(){
   const get=async(url,ms)=>{ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||9000);
     try{ const r=await fetch(url,{signal:c.signal,cache:'no-store',mode:'cors'}); clearTimeout(t); if(!r.ok) return null; return await r.json(); }
     catch(e){ clearTimeout(t); return null; } };
+  const diag=[]; let best=null;
+  const consider=c=>{ if(!c) return false;
+    if(!best||c.last>best.last) best=c;
+    const lastD=new Date(c.last.slice(0,7)+'-01');
+    return isFinite(lastD.getTime())&&(Date.now()-lastD.getTime())/86400000<130; };
+  // 1) Eurostat resmi API (Türkiye HICP, aylık endeks)
+  try{
+    const j=await get('https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_midx?format=JSON&lang=en&geo=TR&coicop=CP00&unit=I15&sinceTimePeriod=2018-01&t='+Date.now(),9000);
+    const ti=j&&j.dimension&&j.dimension.time&&j.dimension.time.category&&j.dimension.time.category.index;
+    if(ti&&j.value){
+      const periods=Object.keys(ti).sort(); const obs=[];
+      for(const p of periods){ const v=Number(j.value[ti[p]]); if(isFinite(v)&&v>0) obs.push([p,v]); }
+      if(obs.length>=13){ diag.push('ES✓'); if(consider({src:'Eurostat',obs:obs.slice(-45),last:obs[obs.length-1][0]})) { window.__cpiDiag=diag; return best; } }
+      else diag.push('ES✗');
+    } else diag.push('ES✗');
+  }catch(e){ diag.push('ES✗'); }
+  // 2) DBnomics adayları
   const cands=[
-    ['OECD','https://api.db.nomics.world/v22/series/OECD/DSD_PRICES%40DF_PRICES_ALL/TUR.M.N.CPI.IX._T.N.?observations=1&format=json'],
-    ['OECD','https://api.db.nomics.world/v22/series/OECD/PRICES_CPI/TUR.CPALTT01.IXOB.M?observations=1&format=json'],
-    ['Eurostat','https://api.db.nomics.world/v22/series/Eurostat/prc_hicp_midx/M.I15.CP00.TR?observations=1&format=json'],
-    ['IMF','https://api.db.nomics.world/v22/series/IMF/CPI/M.TR.PCPI_IX?observations=1&format=json']
+    ['DBe','https://api.db.nomics.world/v22/series/Eurostat/prc_hicp_midx/M.I15.CP00.TR?observations=1&format=json'],
+    ['DBi','https://api.db.nomics.world/v22/series/IMF/CPI/M.TR.PCPI_IX?observations=1&format=json'],
+    ['DBo','https://api.db.nomics.world/v22/series/OECD/PRICES_CPI/TUR.CPALTT01.IXOB.M?observations=1&format=json']
   ];
-  let best=null;
   for(const cd of cands){
     const j=await get(cd[1]+'&t='+Date.now(),8000);
     try{
       const d=j&&j.series&&j.series.docs&&j.series.docs[0];
-      if(!d||!d.period||!d.value) continue;
+      if(!d||!d.period||!d.value){ diag.push(cd[0]+'✗'); continue; }
       const obs=[]; for(let i=0;i<d.period.length;i++){ const v=Number(d.value[i]); if(isFinite(v)&&v>0) obs.push([String(d.period[i]),v]); }
-      if(obs.length<13) continue;
-      const cand={src:cd[0],obs:obs.slice(-45),last:obs[obs.length-1][0]};
-      if(!best||cand.last>best.last) best=cand;
-      const lastD=new Date(cand.last.slice(0,7)+'-01');
-      if(isFinite(lastD.getTime())&&(Date.now()-lastD.getTime())/86400000<130){ best=cand; break; }
-    }catch(e){}
+      if(obs.length<13){ diag.push(cd[0]+'✗'); continue; }
+      diag.push(cd[0]+'✓');
+      if(consider({src:cd[0]==='DBi'?'IMF':(cd[0]==='DBo'?'OECD':'Eurostat'),obs:obs.slice(-45),last:obs[obs.length-1][0]})) break;
+    }catch(e){ diag.push(cd[0]+'✗'); }
   }
+  window.__cpiDiag=diag;
   return best;
 }
 async function applyCpi(best){
@@ -1216,7 +1230,7 @@ async function fetchInflation(){
     if(!hit) throw 0;
     settings.inflation={annual:Math.round(Number(hit.value)*10)/10,year:hit.date}; settings.inflMode='fallback';
     await sset(KEY_S,settings); window.__heroFocus=0; render();
-  }catch(e){ if(st) st.textContent='Çekilemedi — elle girebilirsiniz'; }
+  }catch(e){ if(st) st.textContent='Çekilemedi ['+((window.__cpiDiag||[]).join(' ')||'-')+' WB✗] — bu kodu Claude\'a iletin'; }
 }
 async function autoFetchCpi(){
   try{
