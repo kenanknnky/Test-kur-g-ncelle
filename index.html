@@ -224,6 +224,7 @@ tr.editrow:hover{background:var(--surface2)}
 <script>
 /* ---------- storage ---------- */
 const KEY_E='portfolio_entries_v1', KEY_S='portfolio_settings_v1', KEY_A='portfolio_alloc_v1';
+const APP_VER='v32';
 const mem={};
 async function sget(k){
   if(window.storage){ try{ const r=await window.storage.get(k,false); return r?JSON.parse(r.value):null; }catch(e){ return null; } }
@@ -963,7 +964,8 @@ function renderSettings(){
     '<h3>Sıfırla</h3><p class="d">Tüm kayıtları siler. Geri alınamaz.</p>'+
     '<button class="iconbtn danger" onclick="resetAll()">Tüm verileri sil</button>'+
   '</div>'+
-  '<p class="note">Not: En güncel kayıttaki ('+fmtDate('2026-06-20')+') USD/TL ve gram altın değerleri tahminîdir — Kayıtlar sekmesinden düzenleyebilirsiniz. Midas artık çarpansız normal bir kategori (165.980 ₺).</p>';
+  '<p class="note">Not: En güncel kayıttaki ('+fmtDate('2026-06-20')+') USD/TL ve gram altın değerleri tahminîdir — Kayıtlar sekmesinden düzenleyebilirsiniz. Midas artık çarpansız normal bir kategori (165.980 ₺).</p>'+
+  '<p class="note" style="text-align:center">Uygulama sürümü: '+APP_VER+'</p>';
 }
 
 /* ---------- entry modal ---------- */
@@ -1130,7 +1132,7 @@ async function fetchRates(){
   const got=[];
   if(rate&&fu){ fu.value=(Math.round(rate*100)/100).toString().replace('.',','); got.push('USD/TL '+trNum(rate,2)); }
   if(gram&&fg){ fg.value=Math.round(gram); got.push('gram '+trNum(Math.round(gram))+' ₺'); }
-  if(st) st.textContent= got.length? '✓ '+got.join(' · ')+' — düzenleyebilirsiniz' : 'Çekilemedi ['+diag.join(' ')+'] — bu kodu Claude\'a iletin, elle de girebilirsiniz';
+  if(st) st.textContent= got.length? '✓ '+got.join(' · ')+' — düzenleyebilirsiniz' : 'Çekilemedi ['+diag.join(' ')+' · '+APP_VER+'] — bu kodu Claude\'a iletin, elle de girebilirsiniz';
   if(btn) btn.disabled=false;
 }
 
@@ -1176,6 +1178,7 @@ async function fetchCpiCore(){
     try{ const r=await fetch(url,{signal:c.signal,cache:'no-store',mode:'cors'}); clearTimeout(t); if(!r.ok) return null; return await r.json(); }
     catch(e){ clearTimeout(t); return null; } };
   const diag=[]; let best=null;
+  try{ const p=await get('https://finans.truncgil.com/v4/today.json?t='+Date.now(),5000); diag.push(p?'NET✓':'NET✗'); window.__netOk=!!p; }catch(e){ diag.push('NET✗'); window.__netOk=false; }
   const consider=c=>{ if(!c) return false;
     if(!best||c.last>best.last) best=c;
     const lastD=new Date(c.last.slice(0,7)+'-01');
@@ -1230,7 +1233,12 @@ async function fetchInflation(){
     if(!hit) throw 0;
     settings.inflation={annual:Math.round(Number(hit.value)*10)/10,year:hit.date}; settings.inflMode='fallback';
     await sset(KEY_S,settings); window.__heroFocus=0; render();
-  }catch(e){ if(st) st.textContent='Çekilemedi ['+((window.__cpiDiag||[]).join(' ')||'-')+' WB✗] — bu kodu Claude\'a iletin'; }
+  }catch(e){ if(st){
+    const dg=(window.__cpiDiag||[]).join(' ')||'-';
+    st.textContent= window.__netOk===false
+      ? 'Dış bağlantılar tamamen kapalı görünüyor — Claude önizlemesindeyseniz bu normaldir; telefondaki uygulamada deneyin.'
+      : 'Çekilemedi ['+dg+' WB✗ · '+APP_VER+'] — bu kodu Claude\'a iletin';
+  } }
 }
 async function autoFetchCpi(){
   try{
